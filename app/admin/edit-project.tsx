@@ -90,7 +90,7 @@ export default function EditProject() {
       if (!id) return;
       try {
         const res = await fetch(
-          `${API}/api/getProjects.php?id=${id}`
+          `${API}/getProjects.php?id=${id}`
         );
         const text = await res.text();
 
