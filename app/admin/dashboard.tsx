@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, TouchableOpacityProps } from 'react-native';
 import { router } from 'expo-router';
-import { API } from '../api/api';
+
 
 // --- Custom Colors (Keep for context) ---
 const Colors = {

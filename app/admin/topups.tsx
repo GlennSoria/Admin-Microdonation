@@ -63,7 +63,7 @@ export default function TopUps() {
   const fetchTopUps = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/get_topups.php`);
+      const res = await fetch(`${API}/get_topups.php`);
       const data: WalletTransaction[] = await res.json();
       setTransactions(data);
     } catch (error) {

@@ -73,7 +73,7 @@ export default function AdminDonations() {
   useEffect(() => {
     const fetchDonations = async () => {
       try {
-        const res = await fetch(`${API}/api/view_donations.php`);
+        const res = await fetch(`${API}/view_donations.php`);
         const text = await res.text();
 
         let data: Donation[] = [];

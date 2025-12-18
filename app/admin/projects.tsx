@@ -70,7 +70,7 @@ export default function Projects() {
 
   useEffect(() => {
     setIsLoading(true);
-    fetch(`${API}/api/getProjects.php`)
+    fetch(`${API}/getProjects.php`)
       .then(res => res.json())
       .then((data: Project[]) => { // Explicitly type the fetched data
         setProjects(data);

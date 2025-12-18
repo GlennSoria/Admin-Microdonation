@@ -129,7 +129,7 @@ export default function EditProject() {
     // ... (Save Logic) ...
     try {
         const res = await fetch(
-          'http://192.168.1.20/api/admin/updateProject.php',
+          `${API}/admin/updateProject.php`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

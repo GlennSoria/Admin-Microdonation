@@ -55,7 +55,7 @@ export default function AddProject() {
     // You would typically use a loading state for this, but for simplicity, we'll proceed.
 
     try {
-      const res = await fetch(`${API}/api/add_project.php`, {
+      const res = await fetch(`${API}/add_project.php`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
