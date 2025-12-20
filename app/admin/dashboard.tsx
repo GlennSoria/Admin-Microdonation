@@ -1,9 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, TouchableOpacityProps } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
 import { router } from 'expo-router';
 
-
-// --- Custom Colors (Keep for context) ---
+// --- Custom Colors ---
 const Colors = {
   background: '#3A3A3A',
   cardAccent1: '#F5C170',
@@ -11,39 +10,35 @@ const Colors = {
   textButtonDark: '#2C2C2C',
 };
 
-// --- FIX: Define the Interface for AdminButton Props ---
+// --- Interface for AdminButton Props ---
 interface AdminButtonProps {
   title: string;
-  onPress: () => void; // Defines that onPress is a function that returns nothing (void)
+  onPress: () => void;
 }
 
-// --- Custom Components (Using the new interface) ---
-
-// Apply the interface AdminButtonProps to the component's props
+// --- AdminButton Component ---
 const AdminButton: React.FC<AdminButtonProps> = ({ title, onPress }) => (
   <TouchableOpacity style={styles.adminButton} onPress={onPress}>
     <Text style={styles.adminButtonText}>{title}</Text>
   </TouchableOpacity>
 );
 
-// --- Main Component ---
-
+// --- Main Admin Dashboard ---
 export default function AdminDashboard() {
-  const handlePress = (path: string) => { // Added type 'string' for path
+  const handlePress = (path: string) => {
     router.push(path);
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        
-        {/* Customized Dashboard Header */}
+        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Admin Panel</Text>
           <Text style={styles.subtitle}>Welcome back, Administrator.</Text>
         </View>
 
-        {/* Admin Functions */}
+        {/* Admin Buttons */}
         <View style={styles.adminToolsContainer}>
           <AdminButton 
             title="Manage Projects" 
@@ -57,14 +52,17 @@ export default function AdminDashboard() {
             title="View Top-Ups" 
             onPress={() => handlePress('/admin/topups')} 
           />
+          <AdminButton 
+            title="Pending Accounts" 
+            onPress={() => handlePress('/admin/pending_accounts')} 
+          />
         </View>
-        
       </View>
     </SafeAreaView>
   );
 }
 
-// --- Stylesheet (Unchanged) ---
+// --- Styles ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,

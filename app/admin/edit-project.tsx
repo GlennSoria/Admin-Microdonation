@@ -1,3 +1,4 @@
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,28 +8,26 @@ import {
   StyleSheet,
   SafeAreaView,
   TouchableOpacity,
-  Platform,
   ScrollView,
+  Image,
+  Platform,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { useEffect, useState } from 'react';
+import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, router } from 'expo-router';
-import { API } from '../api/api';
-import React from 'react';
+import { API } from '../api/api'; // <-- dynamic API
 
-// --- Custom Colors (Unchanged) ---
 const Colors = {
   background: '#3A3A3A',
-  cardBackground: '#2C2C2C', 
-  inputBackground: '#4A4A4A', 
+  cardBackground: '#2C2C2C',
+  inputBackground: '#4A4A4A',
   cardAccent1: '#F5C170',
-  textPrimary: '#FFFFFF', 
-  textSecondary: '#AAAAAA', 
+  textPrimary: '#FFFFFF',
+  textSecondary: '#AAAAAA',
   textPlaceholder: '#777777',
   textButtonDark: '#2C2C2C',
 };
 
-// --- Custom Components (Unchanged) ---
 interface CustomButtonProps {
   title: string;
   onPress: () => void;
@@ -54,7 +53,14 @@ interface LabeledInputProps {
   multiline?: boolean;
 }
 
-const LabeledTextInput: React.FC<LabeledInputProps> = ({ label, value, onChangeText, placeholder, keyboardType = 'default', multiline = false }) => (
+const LabeledTextInput: React.FC<LabeledInputProps> = ({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  keyboardType = 'default',
+  multiline = false,
+}) => (
   <View style={styles.inputGroup}>
     <Text style={styles.inputLabel}>{label}</Text>
     <TextInput
@@ -71,51 +77,45 @@ const LabeledTextInput: React.FC<LabeledInputProps> = ({ label, value, onChangeT
   </View>
 );
 
-// --- Main Component (State/Logic Unchanged) ---
-
 export default function EditProject() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const [title, setTitle] = useState<string>('');
-  const [description, setDescription] = useState<string>('');
-  const [targetAmount, setTargetAmount] = useState<string>('');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [targetAmount, setTargetAmount] = useState('');
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [existingImage, setExistingImage] = useState<string | null>(null);
 
   const isFormValid = title.trim() !== '' && description.trim() !== '' && targetAmount.trim() !== '';
 
   useEffect(() => {
-    // ... (Load Project Logic) ...
     const loadProject = async () => {
       if (!id) return;
       try {
-        const res = await fetch(
-          `${API}/getProjects.php?id=${id}`
-        );
+        const res = await fetch(`${API}/getProjects.php?id=${id}`);
         const text = await res.text();
-
-        let p: any;
+        let data: any;
         try {
-          p = JSON.parse(text);
+          data = JSON.parse(text);
         } catch {
-          Alert.alert('Server Error', text || 'Received invalid data from server.');
+          Alert.alert('Server Error', 'Invalid response from server');
           return;
         }
-
-        const projectData = Array.isArray(p) ? p[0] : p;
-
-        if (projectData && projectData.title) {
-            setTitle(projectData.title ?? '');
-            setDescription(projectData.description ?? '');
-            setTargetAmount(String(projectData.target_amount ?? ''));
-            setStatus(projectData.status === 'inactive' ? 'inactive' : 'active');
-        } else {
-            Alert.alert('Error', 'Project data not found.');
-            router.back();
+        const project = Array.isArray(data) ? data[0] : data;
+        if (!project) {
+          Alert.alert('Error', 'Project not found');
+          router.back();
+          return;
         }
-
+        setTitle(project.title ?? '');
+        setDescription(project.description ?? '');
+        setTargetAmount(String(project.target_amount ?? ''));
+        setStatus(project.status === 'inactive' ? 'inactive' : 'active');
+        setExistingImage(project.image ?? null);
       } catch (e) {
-        Alert.alert('Network Error', 'Could not load project details.');
+        Alert.alert('Network Error', 'Unable to fetch project details');
       } finally {
         setLoading(false);
       }
@@ -124,45 +124,69 @@ export default function EditProject() {
     loadProject();
   }, [id]);
 
+  const pickImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission required', 'Camera roll permission is required to select an image.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setImageUri(result.assets[0].uri);
+    }
+  };
+
   const save = async () => {
     if (!isFormValid || !id) return;
-    // ... (Save Logic) ...
+
+    const formData = new FormData();
+    formData.append('id', id);
+    formData.append('title', title);
+    formData.append('description', description);
+    formData.append('target_amount', targetAmount);
+    formData.append('status', status);
+
+    if (imageUri) {
+      const filename = imageUri.split('/').pop() as string;
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : `image`;
+      // @ts-ignore
+      formData.append('image', { uri: imageUri, name: filename, type });
+    }
+
     try {
-        const res = await fetch(
-          `${API}/admin/updateProject.php`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: Number(id),
-              title,
-              description,
-              target_amount: Number(targetAmount),
-              status,
-            }),
-          }
-        );
+      const res = await fetch(`${API}/admin/updateProject.php`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
 
-        const text = await res.text();
-        const data = JSON.parse(text);
-
-        if (data.success) {
-          Alert.alert('Success', 'Project Updated Successfully!');
-          router.back();
-        } else {
-          Alert.alert('Error', data.message || 'Update failed');
-        }
+      const data = await res.json();
+      if (data.success) {
+        Alert.alert('Success', 'Project updated successfully');
+        router.back();
+      } else {
+        Alert.alert('Error', data.message || 'Update failed');
+      }
     } catch (e) {
-        Alert.alert('Network Error', 'Failed to connect to the update server.');
+      console.log(e);
+      Alert.alert('Network Error', 'Failed to connect to server');
     }
   };
 
   if (loading) {
     return (
-        <View style={[styles.safeArea, styles.loadingContainer]}>
-            <ActivityIndicator size="large" color={Colors.cardAccent1} />
-            <Text style={styles.loadingText}>Loading project details...</Text>
-        </View>
+      <View style={[styles.safeArea, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={Colors.cardAccent1} />
+        <Text style={styles.loadingText}>Loading project details...</Text>
+      </View>
     );
   }
 
@@ -170,204 +194,84 @@ export default function EditProject() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.container}>
-            <Text style={styles.title}>Edit Project (ID: {id})</Text>
+          <Text style={styles.title}>Edit Project (ID: {id})</Text>
 
-            {/* --- TOP CARD BLOCK: Title & Amount/Status --- */}
-            <View style={styles.cardBlock}>
-                
-                {/* Full Width Input: Title */}
-                <LabeledTextInput
-                    label="Project Title"
-                    placeholder="Enter project title"
-                    value={title}
-                    onChangeText={setTitle}
-                />
+          {(existingImage || imageUri) && (
+            <TouchableOpacity onPress={pickImage} style={{ marginVertical: 10 }}>
+              <Image
+                source={{ uri: imageUri || existingImage! }}
+                style={{ width: '100%', height: 200, borderRadius: 15 }}
+                resizeMode="cover"
+              />
+              <Text style={{ color: Colors.cardAccent1, textAlign: 'center', marginTop: 5 }}>
+                Tap to change image
+              </Text>
+            </TouchableOpacity>
+          )}
 
-                {/* Two-Column Grid: Amount and Status */}
-                <View style={styles.gridRow}>
-                    
-                    {/* Column 1: Target Amount */}
-                    <View style={styles.gridItem}>
-                        <LabeledTextInput
-                            label="Target Amount (₱)"
-                            placeholder="e.g., 5000"
-                            value={targetAmount}
-                            onChangeText={setTargetAmount}
-                            keyboardType="numeric"
-                        />
-                    </View>
+          {!existingImage && !imageUri && <CustomButton title="Select Image" onPress={pickImage} />}
 
-                    {/* Column 2: Status Picker FIX */}
-                    <View style={styles.gridItem}>
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Status</Text>
-                            <View style={styles.pickerContainer}>
-                                <Picker
-                                    selectedValue={status}
-                                    onValueChange={(itemValue) => setStatus(itemValue)}
-                                    style={styles.picker}
-                                    mode="dropdown"
-                                    dropdownIconColor={Colors.textPrimary}
-                                    // 💡 FIX: The most reliable way to change the dialog/item color 
-                                    // on Android is often through `style` on the Picker, 
-                                    // but we also use the `color` prop for maximum compatibility.
-                                    itemStyle={styles.pickerItem}
-                                    
-                                    // 💡 FIX 2: Explicitly set the text color on the Picker for 
-                                    // both selected value and hopefully the Android dialog text.
-                                    // We use a temporary fix of setting the text color of the parent container on Android.
-                                    // The 'color' prop is applied via styles.picker
-                                >
-                                    {/* 💡 FIX 3: Removed individual item color settings, trusting the main Picker style 
-                                        and the container style to handle it better. */}
-                                    <Picker.Item label="Active" value="active" />
-                                    <Picker.Item label="Inactive" value="inactive" />
-                                </Picker>
-                            </View>
-                        </View>
-                    </View>
-                </View>
+          <LabeledTextInput label="Project Title" value={title} onChangeText={setTitle} placeholder="Enter project title" />
+          
+          <View style={styles.gridRow}>
+            <View style={styles.gridItem}>
+              <LabeledTextInput
+                label="Target Amount (₱)"
+                value={targetAmount}
+                onChangeText={setTargetAmount}
+                placeholder="e.g., 5000"
+                keyboardType="numeric"
+              />
             </View>
-            
-            {/* --- DESCRIPTION BLOCK --- */}
-            <LabeledTextInput
-                label="Detailed Description"
-                placeholder="Describe the project goals and needs..."
-                value={description}
-                onChangeText={setDescription}
-                multiline={true}
-            />
+            <View style={styles.gridItem}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Status</Text>
+                <View style={styles.pickerContainer}>
+                  <Picker
+                    selectedValue={status}
+                    onValueChange={setStatus}
+                    style={styles.picker}
+                    mode="dropdown"
+                  >
+                    <Picker.Item label="Active" value="active" />
+                    <Picker.Item label="Inactive" value="inactive" />
+                  </Picker>
+                </View>
+              </View>
+            </View>
+          </View>
 
-            <CustomButton
-                title="Update Project"
-                onPress={save}
-                disabled={!isFormValid}
-            />
+          <LabeledTextInput
+            label="Detailed Description"
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Describe the project goals..."
+            multiline
+          />
+
+          <CustomButton title="Update Project" onPress={save} disabled={!isFormValid} />
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-// --- Stylesheet ---
-
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: Colors.background,
-  },
-  loadingText: {
-    color: Colors.textPrimary,
-    marginTop: 10,
-    fontSize: 16,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    padding: 20,
-  },
-  container: {
-    flex: 1,
-    gap: 20,
-  },
-  title: {
-    color: Colors.textPrimary,
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 10,
-    alignSelf: 'center',
-  },
-  cardBlock: {
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 20,
-    padding: 20,
-    gap: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 8,
-  },
-  inputGroup: {
-    gap: 5,
-  },
-  inputLabel: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '600',
-    paddingHorizontal: 5,
-  },
-  // Reused input style for consistency
-  input: {
-    backgroundColor: Colors.inputBackground,
-    color: Colors.textPrimary, 
-    paddingHorizontal: 16,
-    paddingVertical: Platform.OS === 'ios' ? 16 : 10,
-    borderRadius: 15,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-  },
-  textArea: {
-    height: 120,
-    paddingVertical: 16,
-  },
-  gridRow: {
-    flexDirection: 'row',
-    gap: 15,
-  },
-  gridItem: {
-    flex: 1,
-  },
-  // --- Picker Styles for the new container ---
-  pickerContainer: {
-    backgroundColor: Colors.inputBackground,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    overflow: 'hidden',
-    justifyContent: 'center',
-    height: Platform.OS === 'ios' ? 52 : 46,
-    // 💡 FIX: For Android dialog issues, setting the text color on the *parent* // container view can sometimes influence the dialog text.
-    color: Platform.OS === 'android' ? Colors.textPrimary : undefined, 
-  },
-  picker: {
-    width: '100%',
-    // 💡 FIX: This ensures the text inside the *displayed* picker element is visible
-    color: Colors.textPrimary, 
-  },
-  // NOTE: This style often only affects iOS when the wheel opens.
-  pickerItem: {
-    color: Colors.textPrimary,
-    // 💡 FIX: Setting a transparent background on iOS might sometimes help the text visibility.
-    backgroundColor: Platform.OS === 'ios' ? 'transparent' : undefined,
-  },
-  // --- Button Styles (Unchanged) ---
-  customButton: {
-    backgroundColor: Colors.cardAccent1,
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    alignItems: 'center',
-    marginTop: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 8,
-  },
-  customButtonText: {
-    color: Colors.textButtonDark,
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  disabledButton: {
-    opacity: 0.5,
-  }
+  safeArea: { flex: 1, backgroundColor: Colors.background },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
+  loadingText: { color: Colors.textPrimary, marginTop: 10 },
+  scrollContent: { flexGrow: 1, padding: 20 },
+  container: { flex: 1, gap: 20 },
+  title: { color: Colors.textPrimary, fontSize: 28, fontWeight: '700', marginBottom: 10, alignSelf: 'center' },
+  inputGroup: { gap: 5 },
+  inputLabel: { color: Colors.textSecondary, fontSize: 14, fontWeight: '600', paddingHorizontal: 5 },
+  input: { backgroundColor: Colors.inputBackground, color: Colors.textPrimary, paddingHorizontal: 16, paddingVertical: Platform.OS === 'ios' ? 16 : 10, borderRadius: 15, fontSize: 16 },
+  textArea: { height: 120, paddingVertical: 16 },
+  gridRow: { flexDirection: 'row', gap: 15 },
+  gridItem: { flex: 1 },
+  pickerContainer: { backgroundColor: Colors.inputBackground, borderRadius: 15, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  picker: { width: '100%', color: Colors.textPrimary },
+  customButton: { backgroundColor: Colors.cardAccent1, paddingVertical: 18, paddingHorizontal: 20, borderRadius: 20, alignItems: 'center', marginTop: 10 },
+  customButtonText: { color: Colors.textButtonDark, fontSize: 18, fontWeight: '800' },
+  disabledButton: { opacity: 0.5 },
 });
